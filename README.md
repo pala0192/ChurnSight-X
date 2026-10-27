@@ -28,6 +28,14 @@ python scripts\train.py --events data\raw\events.csv
 
 ## 예측
 
+```powershell
+python scripts\predict.py --events data\raw\events.csv --date 2026-06-30
+```
+
+`data/models/LATEST` 모델로 예측해 `data/predictions/<기준일>_<모델버전>.csv`에 저장합니다. `--model-version`으로 다른 모델을, `--output`으로 저장 경로를 지정할 수 있습니다.
+
+Python 코드에서 직접 호출할 수도 있습니다.
+
 ```python
 import pandas as pd
 

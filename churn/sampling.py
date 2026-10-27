@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 import pandas as pd
 
-from config import OBS_DAYS, PRED_DAYS, REFERENCE_STRIDE_DAYS
+from config import MIN_ACTIVE_DAYS, OBS_DAYS, PRED_DAYS, REFERENCE_STRIDE_DAYS
 
 
 def _date_window(
@@ -26,9 +26,9 @@ def _date_window(
     if not missing.empty:
         raise ValueError(f"Activity matrix is missing dates: {missing.strftime('%Y-%m-%d').tolist()}")
 
-    window = mat.copy()
-    window.columns = dates
-    return window.loc[:, window_dates]
+    window = mat.iloc[:, dates.get_indexer(window_dates)]
+    window.columns = window_dates
+    return window
 
 
 def target_mask(
@@ -37,15 +37,10 @@ def target_mask(
 ) -> pd.Series:
     """Return visitors eligible for a churn prediction at the reference date."""
     observation = _date_window(mat, reference_date, -(OBS_DAYS - 1), 0).fillna(0).gt(0)
-    history = observation.iloc[:, : OBS_DAYS - PRED_DAYS]
-    historical_inactivity = (
-        (~history).T.rolling(window=PRED_DAYS).sum().eq(PRED_DAYS).any(axis=0)
-    )
-    was_active_before_gap = ~historical_inactivity
-
+    has_min_active_days = observation.sum(axis=1).ge(MIN_ACTIVE_DAYS)
     active_seven_days_ago = observation.iloc[:, -(PRED_DAYS + 1)]
     inactive_since = ~observation.iloc[:, -PRED_DAYS:].any(axis=1)
-    return active_seven_days_ago & inactive_since & was_active_before_gap
+    return active_seven_days_ago & inactive_since & has_min_active_days
 
 
 def label(

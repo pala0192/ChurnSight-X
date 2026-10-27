@@ -12,20 +12,23 @@ class SamplingTests(unittest.TestCase):
             self.reference_date - pd.Timedelta(days=29),
             self.reference_date + pd.Timedelta(days=7),
         )
-        self.activity = pd.DataFrame(0, index=["eligible", "recent", "old_gap"], columns=dates)
+        self.activity = pd.DataFrame(0, index=["eligible", "recent", "three_days", "two_days"], columns=dates)
         for offset in (-29, -23, -17, -11, -7):
             self.activity.loc["eligible", self.reference_date + pd.Timedelta(days=offset)] = 1
         self.activity.loc["recent"] = self.activity.loc["eligible"]
         self.activity.loc["recent", self.reference_date - pd.Timedelta(days=3)] = 1
-        for offset in (-29, -21, -13, -7):
-            self.activity.loc["old_gap", self.reference_date + pd.Timedelta(days=offset)] = 1
+        for offset in (-29, -18, -7):
+            self.activity.loc["three_days", self.reference_date + pd.Timedelta(days=offset)] = 1
+        for offset in (-15, -7):
+            self.activity.loc["two_days", self.reference_date + pd.Timedelta(days=offset)] = 1
 
     def test_target_requires_all_eligibility_conditions(self) -> None:
         targets = target_mask(self.activity, self.reference_date)
 
         self.assertTrue(targets["eligible"])
         self.assertFalse(targets["recent"])
-        self.assertFalse(targets["old_gap"])
+        self.assertTrue(targets["three_days"])
+        self.assertFalse(targets["two_days"])
 
     def test_label_is_one_only_when_future_period_is_inactive(self) -> None:
         self.activity.loc["recent", self.reference_date + pd.Timedelta(days=4)] = 1
@@ -60,7 +63,12 @@ class SamplingTests(unittest.TestCase):
                 "visitor_id": "eligible",
                 "reference_date": self.reference_date,
                 "churn": 1,
-            }
+            },
+            {
+                "visitor_id": "three_days",
+                "reference_date": self.reference_date,
+                "churn": 1,
+            },
         ])
 
     def test_training_reference_dates_require_full_windows(self) -> None:

@@ -32,7 +32,7 @@ flowchart LR
 | 날짜 | UTC 날짜 단위. 수집 첫날·마지막 날은 불완전일로 제외 | `daily.complete_date_range` |
 | 활동 | 조회·장바구니·구매 중 1건 이상 있는 날 | `daily.activity_matrix` |
 | 기준일 D | 관찰 D-29 ~ D (30일) | `OBS_DAYS = 30` |
-| 예측 대상 | D-7 활동 + D-6~D 7일 연속 미활동 + D-29~D-7에 7일 연속 미활동 없음 | `sampling.target_mask` |
+| 예측 대상 | D-7 활동 + D-6~D 7일 연속 미활동 + D-29~D 활동일 3일 이상 (`config.MIN_ACTIVE_DAYS`) | `sampling.target_mask` |
 | 예측 기간 | D+1 ~ D+7 | `PRED_DAYS = 7` |
 | 라벨 | 예측 기간 활동 0일 → 1(이탈), 1일 이상 → 0(유지) | `sampling.label` |
 | 표본 | (이용자 ID, 기준일). 기준일마다 대상 조건 재적용 | `sampling.build_training_samples` |
@@ -136,7 +136,7 @@ visitorid 원값은 화면·API에 노출하지 않는다(customer_key = salt �
 | 분할 비율 | 기준일 개수 60/20/20 (경계 간격 제외 후) | config.SPLIT_RATIOS |
 | 모델 선택 | 검증 PR-AUC 최고 (로지스틱 회귀가 이기면 그것을 선택) | train.py |
 | 최종 재학습 | 하지 않음 (학습 자료로 학습, 검증으로 early stopping) | train.py |
-| 위험 등급 | high ≥ 0.60 / medium ≥ 0.35 / low | config.RISK_* |
+| 위험 등급 | high ≥ 0.70 / medium ≥ 0.30 / low < 0.30 | config.RISK_* |
 | 업로드 제한 | 200MB, 행 오류 5% 초과 시 거부 | config |
 | Accuracy | `accuracy_ref`, `balanced_accuracy_ref`로 참고 보고만 | evaluate.metrics_at |
 
