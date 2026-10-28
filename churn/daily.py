@@ -1,12 +1,25 @@
 """Normalize Retail Rocket events and build daily activity matrices."""
 
+from pathlib import Path
+
 import pandas as pd
 
 from config import MAX_INVALID_ROW_RATIO
 
 
-EVENT_TYPES = ("view", "addtocart", "transaction")
+# Every recognized event marks the visitor active that day; removals count as visits too.
+EVENT_TYPES = ("view", "addtocart", "removefromcart", "transaction")
 EVENT_COLUMNS = ("timestamp", "visitorid", "event", "itemid")
+
+
+def read_events(paths: list[str | Path]) -> pd.DataFrame:
+    """Read and concatenate event CSVs; a directory contributes its *.csv files in name order."""
+    files = []
+    for path in map(Path, paths):
+        files.extend(sorted(path.glob("*.csv")) if path.is_dir() else [path])
+    if not files:
+        raise ValueError("No event CSV files were found.")
+    return pd.concat([pd.read_csv(file) for file in files], ignore_index=True)
 
 
 def normalize_events(events: pd.DataFrame) -> pd.DataFrame:

@@ -31,8 +31,8 @@ flowchart LR
 |---|---|---|
 | 날짜 | UTC 날짜 단위. 수집 첫날·마지막 날은 불완전일로 제외 | `daily.complete_date_range` |
 | 활동 | 조회·장바구니·구매 중 1건 이상 있는 날 | `daily.activity_matrix` |
-| 기준일 D | 관찰 D-29 ~ D (30일) | `OBS_DAYS = 30` |
-| 예측 대상 | D-7 활동 + D-6~D 7일 연속 미활동 + D-29~D 활동일 3일 이상 (`config.MIN_ACTIVE_DAYS`) | `sampling.target_mask` |
+| 기준일 D | 관찰 D-44 ~ D (45일) | `OBS_DAYS = 45` |
+| 예측 대상 | D-7 활동 + D-6~D 7일 연속 미활동 + D-44~D 활동일 4일 이상 (`config.MIN_ACTIVE_DAYS`) | `sampling.target_mask` |
 | 예측 기간 | D+1 ~ D+7 | `PRED_DAYS = 7` |
 | 라벨 | 예측 기간 활동 0일 → 1(이탈), 1일 이상 → 0(유지) | `sampling.label` |
 | 표본 | (이용자 ID, 기준일). 기준일마다 대상 조건 재적용 | `sampling.build_training_samples` |

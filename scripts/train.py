@@ -6,13 +6,11 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pandas as pd
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from churn.daily import activity_matrix, complete_date_range, normalize_events, trim_incomplete_days
+from churn.daily import activity_matrix, complete_date_range, normalize_events, read_events, trim_incomplete_days
 from churn.features import build_features
 from churn.models import DEFAULT_XGBOOST_PARAMETERS, train_xgboost
 from churn.sampling import build_training_samples, training_reference_dates
@@ -21,7 +19,13 @@ from config import MODELS_DIR, REFERENCE_STRIDE_DAYS, TARGET_RECALL
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--events", required=True, type=Path, help="Retail Rocket events CSV")
+    parser.add_argument(
+        "--events",
+        required=True,
+        type=Path,
+        nargs="+",
+        help="Event CSV files or directories of CSVs",
+    )
     parser.add_argument("--models-dir", type=Path, default=MODELS_DIR)
     parser.add_argument("--stride", type=int, default=REFERENCE_STRIDE_DAYS)
     parser.add_argument("--target-recall", type=float, default=TARGET_RECALL)
@@ -34,7 +38,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    events = normalize_events(pd.read_csv(args.events))
+    events = normalize_events(read_events(args.events))
     complete_dates = complete_date_range(events)
     complete_events = trim_incomplete_days(events)
     matrix = activity_matrix(complete_events, dates=complete_dates)

@@ -11,6 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from churn.daily import read_events
 from churn.models import load_model_bundle
 from churn.service import predict_events
 from config import MODELS_DIR, PREDICTIONS_DIR
@@ -18,7 +19,13 @@ from config import MODELS_DIR, PREDICTIONS_DIR
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--events", required=True, type=Path, help="Retail Rocket events CSV")
+    parser.add_argument(
+        "--events",
+        required=True,
+        type=Path,
+        nargs="+",
+        help="Event CSV files or directories of CSVs",
+    )
     parser.add_argument("--date", required=True, help="Reference date (YYYY-MM-DD)")
     parser.add_argument("--model-version", help="Model version directory name (default: LATEST)")
     parser.add_argument("--models-dir", type=Path, default=MODELS_DIR)
@@ -28,7 +35,7 @@ def main() -> None:
     version = args.model_version or (args.models_dir / "LATEST").read_text(encoding="ascii").strip()
     bundle = load_model_bundle(args.models_dir / version / "bundle.joblib")
     reference_date = pd.Timestamp(args.date).normalize()
-    predictions = predict_events(pd.read_csv(args.events), reference_date, bundle)
+    predictions = predict_events(read_events(args.events), reference_date, bundle)
 
     output = args.output or PREDICTIONS_DIR / f"{reference_date.date()}_{version}.csv"
     output.parent.mkdir(parents=True, exist_ok=True)

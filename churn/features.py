@@ -1,4 +1,4 @@
-"""Build the sixteen 30-day churn prediction features."""
+"""Build the sixteen 45-day churn prediction features."""
 
 import numpy as np
 import pandas as pd
@@ -8,24 +8,26 @@ from churn.daily import normalize_events
 
 
 FEATURE_COLUMNS = (
-    "active_days_30d",
-    "event_count_30d",
-    "view_count_30d",
-    "cart_count_30d",
-    "transaction_count_30d",
-    "unique_items_30d",
+    "active_days_45d",
+    "event_count_45d",
+    "view_count_45d",
+    "cart_count_45d",
+    "transaction_count_45d",
+    "unique_items_45d",
     "days_since_last_purchase",
     "active_day_gap_mean",
     "active_day_gap_std",
-    "purchase_days_30d",
-    "unique_viewed_items_30d",
-    "unique_cart_items_30d",
-    "unique_purchased_items_30d",
+    "purchase_days_45d",
+    "unique_viewed_items_45d",
+    "unique_cart_items_45d",
+    "unique_purchased_items_45d",
     "view_event_ratio",
     "cart_event_ratio",
     "purchase_event_ratio",
 )
+# days_since_last_purchase is missing (NaN) when the window has no purchase.
 FLOAT_FEATURES = (
+    "days_since_last_purchase",
     "active_day_gap_mean",
     "active_day_gap_std",
     "view_event_ratio",
@@ -48,33 +50,33 @@ def _window_features(window: pd.DataFrame, reference_date: pd.Timestamp) -> pd.D
     purchases = flags.loc[flags["is_transaction"]].groupby("sample_idx")
     features = pd.DataFrame(
         {
-            "event_count_30d": grouped.size(),
-            "view_count_30d": grouped["is_view"].sum(),
-            "cart_count_30d": grouped["is_cart"].sum(),
+            "event_count_45d": grouped.size(),
+            "view_count_45d": grouped["is_view"].sum(),
+            "cart_count_45d": grouped["is_cart"].sum(),
             "purchase_event_count": grouped["is_transaction"].sum(),
-            "unique_items_30d": grouped["itemid"].nunique(),
+            "unique_items_45d": grouped["itemid"].nunique(),
         }
     )
 
     # Multi-item orders share one transactionid; count each order once when ids exist.
     if "transactionid" in flags.columns:
-        features["transaction_count_30d"] = purchases["transactionid"].nunique()
+        features["transaction_count_45d"] = purchases["transactionid"].nunique()
     else:
-        features["transaction_count_30d"] = features["purchase_event_count"]
+        features["transaction_count_45d"] = features["purchase_event_count"]
     features["days_since_last_purchase"] = (reference_date - purchases["event_date"].max()).dt.days
-    features["purchase_days_30d"] = purchases["event_date"].nunique()
-    features["unique_viewed_items_30d"] = views["itemid"].nunique()
-    features["unique_cart_items_30d"] = carts["itemid"].nunique()
-    features["unique_purchased_items_30d"] = purchases["itemid"].nunique()
-    features["view_event_ratio"] = features["view_count_30d"] / features["event_count_30d"]
-    features["cart_event_ratio"] = features["cart_count_30d"] / features["event_count_30d"]
-    features["purchase_event_ratio"] = features["purchase_event_count"] / features["event_count_30d"]
+    features["purchase_days_45d"] = purchases["event_date"].nunique()
+    features["unique_viewed_items_45d"] = views["itemid"].nunique()
+    features["unique_cart_items_45d"] = carts["itemid"].nunique()
+    features["unique_purchased_items_45d"] = purchases["itemid"].nunique()
+    features["view_event_ratio"] = features["view_count_45d"] / features["event_count_45d"]
+    features["cart_event_ratio"] = features["cart_count_45d"] / features["event_count_45d"]
+    features["purchase_event_ratio"] = features["purchase_event_count"] / features["event_count_45d"]
 
     active_dates = flags.loc[:, ["sample_idx", "event_date"]].drop_duplicates()
     active_dates = active_dates.sort_values(["sample_idx", "event_date"])
     gaps = active_dates.groupby("sample_idx")["event_date"].diff().dt.days
     gap_groups = gaps.groupby(active_dates["sample_idx"])
-    features["active_days_30d"] = active_dates.groupby("sample_idx").size()
+    features["active_days_45d"] = active_dates.groupby("sample_idx").size()
     features["active_day_gap_mean"] = gap_groups.mean()
     # Sample standard deviation; a single gap has none and falls back to 0 below.
     features["active_day_gap_std"] = gap_groups.std(ddof=1)
@@ -82,7 +84,7 @@ def _window_features(window: pd.DataFrame, reference_date: pd.Timestamp) -> pd.D
 
 
 def build_features(events: pd.DataFrame, samples: pd.DataFrame) -> pd.DataFrame:
-    """Return sample identifiers and sixteen features from each observation window."""
+    """Return sample identifiers and sixteen features from each OBS_DAYS observation window."""
     required_sample_columns = {"visitor_id", "reference_date"}
     missing_sample_columns = required_sample_columns.difference(samples.columns)
     if missing_sample_columns:
@@ -114,8 +116,8 @@ def build_features(events: pd.DataFrame, samples: pd.DataFrame) -> pd.DataFrame:
 
     feature_frame = pd.concat(parts) if parts else pd.DataFrame(columns=FEATURE_COLUMNS)
     feature_frame = feature_frame.reindex(index=range(len(samples)), columns=FEATURE_COLUMNS)
-    feature_frame["days_since_last_purchase"] = feature_frame["days_since_last_purchase"].fillna(OBS_DAYS)
-    feature_frame = feature_frame.fillna(0)
+    zero_filled = [column for column in FEATURE_COLUMNS if column != "days_since_last_purchase"]
+    feature_frame[zero_filled] = feature_frame[zero_filled].fillna(0)
     feature_frame = feature_frame.astype(
         {
             **{column: "int64" for column in INTEGER_FEATURES},
