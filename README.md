@@ -1,6 +1,6 @@
 # ChurnSight X
 
-Retail Rocket 이벤트 데이터의 고객 이탈을 예측하는 XGBoost 프로젝트입니다. 30일 관찰 기간에서 9개 행동 피처를 계산하고, 다음 7일 활동 여부를 학습 라벨로 사용합니다.
+Retail Rocket 이벤트 데이터의 고객 이탈을 예측하는 XGBoost 프로젝트입니다. 30일 관찰 기간에서 16개 행동 피처를 계산하고, 다음 7일 활동 여부를 학습 라벨로 사용합니다.
 
 ## 데이터 형식
 
@@ -12,6 +12,7 @@ Retail Rocket 이벤트 데이터의 고객 이탈을 예측하는 XGBoost 프�
 | `visitorid` | Visitor identifier |
 | `event` | `view`, `addtocart`, or `transaction` |
 | `itemid` | Item identifier |
+| `transactionid` | Optional. Order identifier; `transaction_count_30d` counts unique ids, or transaction rows when the column is absent |
 
 실제 고객 이벤트, 학습된 모델, 업로드 파일은 저장소에 커밋하지 마세요. `.gitignore`가 `data/`, 가상환경, 모델 바이너리를 제외합니다.
 
@@ -47,7 +48,7 @@ bundle = load_model_bundle("data/models/<version>/bundle.joblib")
 predictions = predict_events(events, "2026-06-30", bundle)
 ```
 
-예측 결과에는 대상 고객별 9개 피처, 이탈 확률, 위험 등급, 임계값 기준 이탈 판정이 포함됩니다.
+예측 결과에는 대상 고객별 16개 피처, 이탈 확률, 위험 등급, 임계값 기준 이탈 판정이 포함됩니다.
 
 ## 테스트
 

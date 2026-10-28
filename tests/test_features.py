@@ -29,23 +29,37 @@ def reference_build_features(events: pd.DataFrame, samples: pd.DataFrame) -> pd.
 
         event_dates = pd.DatetimeIndex(window["event_date"].drop_duplicates()).sort_values()
         gaps = event_dates.to_series().diff().dropna().dt.days
+        views = window.loc[window["event"].eq("view")]
+        carts = window.loc[window["event"].eq("addtocart")]
         purchases = window.loc[window["event"].eq("transaction")]
         if purchases.empty:
             days_since_purchase = OBS_DAYS
         else:
             days_since_purchase = int((reference_date - purchases["event_date"].max()).days)
+        if "transactionid" in purchases.columns:
+            transaction_count = int(purchases["transactionid"].nunique())
+        else:
+            transaction_count = len(purchases)
+        event_count = len(window)
 
         rows.append(
             {
                 "active_days_30d": len(event_dates),
-                "event_count_30d": len(window),
-                "view_count_30d": int(window["event"].eq("view").sum()),
-                "cart_count_30d": int(window["event"].eq("addtocart").sum()),
-                "transaction_count_30d": int(len(purchases)),
+                "event_count_30d": event_count,
+                "view_count_30d": len(views),
+                "cart_count_30d": len(carts),
+                "transaction_count_30d": transaction_count,
                 "unique_items_30d": int(window["itemid"].nunique()),
                 "days_since_last_purchase": days_since_purchase,
                 "active_day_gap_mean": float(gaps.mean()) if not gaps.empty else 0.0,
-                "active_day_gap_std": float(gaps.std(ddof=0)) if not gaps.empty else 0.0,
+                "active_day_gap_std": float(gaps.std(ddof=1)) if len(gaps) > 1 else 0.0,
+                "purchase_days_30d": int(purchases["event_date"].nunique()),
+                "unique_viewed_items_30d": int(views["itemid"].nunique()),
+                "unique_cart_items_30d": int(carts["itemid"].nunique()),
+                "unique_purchased_items_30d": int(purchases["itemid"].nunique()),
+                "view_event_ratio": len(views) / event_count if event_count else 0.0,
+                "cart_event_ratio": len(carts) / event_count if event_count else 0.0,
+                "purchase_event_ratio": len(purchases) / event_count if event_count else 0.0,
             }
         )
 
@@ -66,6 +80,8 @@ class FeatureTests(unittest.TestCase):
             (0, 1, "view", "item-4"),
             (1, 1, "transaction", "future-item"),
             (0, 2, "view", "item-5"),
+            (-5, 3, "view", "item-6"),
+            (-2, 3, "view", "item-6"),
         ]
         self.events = pd.DataFrame(
             [
@@ -83,16 +99,16 @@ class FeatureTests(unittest.TestCase):
         )
         self.samples = pd.DataFrame(
             {
-                "visitor_id": [1, 2],
-                "reference_date": [self.reference_date, self.reference_date],
+                "visitor_id": [1, 2, 3],
+                "reference_date": [self.reference_date] * 3,
             }
         )
 
-    def test_builds_nine_features_from_the_exact_observation_window(self) -> None:
+    def test_builds_sixteen_features_from_the_exact_observation_window(self) -> None:
         features = build_features(self.events, self.samples)
         customer = features.iloc[0]
 
-        self.assertEqual(tuple(features.columns[-9:]), FEATURE_COLUMNS)
+        self.assertEqual(tuple(features.columns[-16:]), FEATURE_COLUMNS)
         self.assertEqual(customer["active_days_30d"], 6)
         self.assertEqual(customer["event_count_30d"], 6)
         self.assertEqual(customer["view_count_30d"], 4)
@@ -101,7 +117,32 @@ class FeatureTests(unittest.TestCase):
         self.assertEqual(customer["unique_items_30d"], 4)
         self.assertEqual(customer["days_since_last_purchase"], 10)
         self.assertAlmostEqual(customer["active_day_gap_mean"], 5.8)
-        self.assertAlmostEqual(customer["active_day_gap_std"], (6.16) ** 0.5)
+        self.assertAlmostEqual(customer["active_day_gap_std"], 7.7 ** 0.5)
+        self.assertEqual(customer["purchase_days_30d"], 1)
+        self.assertEqual(customer["unique_viewed_items_30d"], 3)
+        self.assertEqual(customer["unique_cart_items_30d"], 1)
+        self.assertEqual(customer["unique_purchased_items_30d"], 1)
+        self.assertAlmostEqual(customer["view_event_ratio"], 4 / 6)
+        self.assertAlmostEqual(customer["cart_event_ratio"], 1 / 6)
+        self.assertAlmostEqual(customer["purchase_event_ratio"], 1 / 6)
+
+    def test_transaction_count_uses_unique_transaction_ids(self) -> None:
+        purchase = self.events.loc[self.events["event"].eq("transaction")].iloc[[0]]
+        second_item = purchase.assign(itemid="item-7")
+        events = pd.concat([self.events, second_item], ignore_index=True)
+        events["transactionid"] = np.where(events["event"].eq("transaction"), 501, np.nan)
+
+        customer = build_features(events, self.samples).iloc[0]
+
+        self.assertEqual(customer["transaction_count_30d"], 1)
+        self.assertEqual(customer["unique_purchased_items_30d"], 2)
+        self.assertAlmostEqual(customer["purchase_event_ratio"], 2 / 7)
+
+    def test_single_activity_gap_has_zero_sample_std(self) -> None:
+        customer = build_features(self.events, self.samples).iloc[2]
+
+        self.assertEqual(customer["active_day_gap_mean"], 3.0)
+        self.assertEqual(customer["active_day_gap_std"], 0.0)
 
     def test_missing_purchase_and_single_active_day_use_documented_defaults(self) -> None:
         features = build_features(self.events, self.samples).iloc[1]
@@ -109,6 +150,8 @@ class FeatureTests(unittest.TestCase):
         self.assertEqual(features["days_since_last_purchase"], 30)
         self.assertEqual(features["active_day_gap_mean"], 0.0)
         self.assertEqual(features["active_day_gap_std"], 0.0)
+        self.assertEqual(features["view_event_ratio"], 1.0)
+        self.assertEqual(features["purchase_days_30d"], 0)
 
     def test_rejects_more_than_five_percent_invalid_events(self) -> None:
         invalid = self.events.iloc[[0]].copy()
@@ -131,6 +174,11 @@ class FeatureTests(unittest.TestCase):
                 "event": rng.choice(["view", "view", "view", "addtocart", "transaction"], event_count),
                 "itemid": rng.integers(0, 200, event_count),
             }
+        )
+        events["transactionid"] = np.where(
+            events["event"].eq("transaction"),
+            rng.integers(0, 300, event_count),
+            np.nan,
         )
         reference_dates = pd.date_range("2026-06-01", "2026-07-05", freq="4D")
         samples = pd.DataFrame(

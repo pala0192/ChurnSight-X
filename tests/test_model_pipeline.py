@@ -31,6 +31,13 @@ def make_labeled_features() -> pd.DataFrame:
                     "days_since_last_purchase": 5 + churn * 20,
                     "active_day_gap_mean": 1.0 + churn * 2,
                     "active_day_gap_std": 0.5 + churn,
+                    "purchase_days_30d": 1 - churn,
+                    "unique_viewed_items_30d": engagement // 2,
+                    "unique_cart_items_30d": engagement // 6,
+                    "unique_purchased_items_30d": 1 - churn,
+                    "view_event_ratio": 0.6 + churn * 0.3,
+                    "cart_event_ratio": 0.1 - churn * 0.05,
+                    "purchase_event_ratio": 0.05 * (1 - churn),
                 }
             )
     return pd.DataFrame(rows, columns=["visitor_id", "reference_date", "churn", *FEATURE_COLUMNS])
