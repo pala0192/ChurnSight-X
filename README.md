@@ -1,6 +1,6 @@
 # ChurnSight X
 
-Retail Rocket 이벤트 데이터의 고객 이탈을 예측하는 XGBoost 프로젝트입니다. 30일 관찰 기간에서 9개 행동 피처를 계산하고, 다음 7일 활동 여부를 학습 라벨로 사용합니다.
+Retail Rocket 이벤트 데이터의 고객 이탈을 예측하는 XGBoost 프로젝트입니다. 30일 관찰 기간에서 12개 행동 피처를 계산하고, 다음 7일 활동 여부를 학습 라벨로 사용합니다.
 
 ## 데이터 형식
 
@@ -27,6 +27,14 @@ python scripts\train.py --events data\raw\events.csv
 기본 XGBoost 하이퍼파라미터와 early-stopping 설정은 [`configs/xgboost.json`](configs/xgboost.json)에서 확인할 수 있습니다. 학습 결과는 `data/models/<version>/`에 저장됩니다.
 
 ## 예측
+
+```powershell
+python scripts\predict.py --events data\raw\events.csv --date 2026-06-30
+```
+
+`data/models/LATEST` 모델로 예측해 `data/predictions/<기준일>_<모델버전>.csv`에 저장합니다. `--model-version`으로 다른 모델을, `--output`으로 저장 경로를 지정할 수 있습니다.
+
+Python 코드에서 직접 호출할 수도 있습니다.
 
 ```python
 import pandas as pd

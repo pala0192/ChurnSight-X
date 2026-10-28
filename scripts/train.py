@@ -1,4 +1,4 @@
-"""Train and version the nine-feature XGBoost churn model."""
+"""Train and version the 12-feature XGBoost churn model."""
 
 import argparse
 import json

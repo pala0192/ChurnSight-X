@@ -79,6 +79,7 @@ def train_xgboost(
     output_dir: str | Path,
     parameters: dict[str, Any] | None = None,
     target_recall: float = TARGET_RECALL,
+    partitions: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, Any]:
     """Train a temporal XGBoost model and save binary plus inspectable JSON artifacts."""
     required = {*FEATURE_COLUMNS, "churn", "reference_date"}
@@ -86,7 +87,9 @@ def train_xgboost(
     if missing:
         raise ValueError(f"Training samples are missing columns: {sorted(missing)}")
 
-    partitions = split_samples(samples)
+    partitions = partitions or split_samples(samples)
+    if set(partitions) != {"train", "validation", "test"}:
+        raise ValueError("Partitions must contain exactly train, validation, and test samples.")
     for name, partition in partitions.items():
         if partition.empty:
             raise ValueError(f"The {name} partition has no samples.")
@@ -104,7 +107,10 @@ def train_xgboost(
     model_parameters = {
         **DEFAULT_XGBOOST_PARAMETERS,
         **(parameters or {}),
-        "scale_pos_weight": negative_count / positive_count,
+        "scale_pos_weight": (parameters or {}).get(
+            "scale_pos_weight",
+            negative_count / positive_count,
+        ),
         "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
     }
     model = XGBClassifier(**model_parameters)
