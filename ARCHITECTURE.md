@@ -49,7 +49,7 @@ churn-app/
 │  ├─ validate.py            1단계 업로드 검증·정제
 │  ├─ daily.py               2~4단계 날짜 변환, 불완전일, 봇, 활동 행렬
 │  ├─ sampling.py            5~7단계 기준일, 대상 선정, 라벨, 제외 사유
-│  ├─ features.py            8단계 9개/17개 특성, 한글 라벨
+│  ├─ features.py            8단계 11개 특성, 한글 라벨
 │  ├─ split.py               10단계 기준일 시간순 분할(경계 7일 간격)
 │  ├─ models.py              전원 이탈 / 로지스틱 회귀 / XGBoost + 랜덤 서치
 │  ├─ evaluate.py            지표, 임계값 선정, 세그먼트별 평가, 과적합·누수 점검
@@ -75,7 +75,7 @@ churn-app/
 | validate | `load_and_validate(path)` | CSV/XLSX → (정제 DataFrame, 검증 리포트) |
 | daily | `add_date`, `trim_incomplete_days`, `bot_threshold`, `bot_users`, `activity_matrix` | 이벤트 → 이용자×날짜 0/1 행렬 |
 | sampling | `target_mask(mat, d)`, `label(mat, d)`, `training_reference_dates`, `build_training_samples` | 행렬 → 대상 여부·제외 사유·라벨 |
-| features | `build_features(events, samples)` | (visitorid, ref_date) → 17개 특성 + segment |
+| features | `build_features(events, samples)` | (visitorid, ref_date) → 11개 특성 + segment |
 | split | `split_reference_dates`, `split_samples`, `describe_split` | 기준일 → train/val/test, 표본 수·고유 이용자 수 |
 | models | `AllChurnBaseline`, `make_logreg`, `fit_xgb`, `random_search` | 학습 자료 → 모델, 튜닝 이력 |
 | evaluate | `choose_threshold`, `evaluate`, `goal_check`, `diagnostics` | 확률 → 지표(전체·세그먼트), 점검 신호 |

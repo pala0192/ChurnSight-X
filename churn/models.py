@@ -12,8 +12,9 @@ import xgboost
 from sklearn.metrics import average_precision_score, f1_score, precision_score, recall_score
 from xgboost import XGBClassifier
 
+from churn.explain import explain_predictions, feature_medians
 from churn.features import FEATURE_COLUMNS
-from churn.split import split_samples
+from churn.split import DATASET_COLUMN, split_samples
 from config import RISK_HIGH_MIN, RISK_MEDIUM_MIN, TARGET_RECALL
 
 
@@ -64,14 +65,20 @@ def _metrics(
     }
 
 
-def _date_summary(samples: pd.DataFrame) -> dict[str, str | int]:
+def _date_summary(samples: pd.DataFrame) -> dict[str, Any]:
     dates = pd.to_datetime(samples["reference_date"]).dt.normalize()
-    return {
+    summary: dict[str, Any] = {
         "rows": int(len(samples)),
         "unique_reference_dates": int(dates.nunique()),
         "start": dates.min().date().isoformat(),
         "end": dates.max().date().isoformat(),
     }
+    if DATASET_COLUMN in samples.columns:
+        summary["datasets"] = {
+            str(name): _date_summary(group.drop(columns=DATASET_COLUMN))
+            for name, group in samples.groupby(DATASET_COLUMN, sort=False)
+        }
+    return summary
 
 
 def train_xgboost(
@@ -140,6 +147,9 @@ def train_xgboost(
         sorted(importance.items(), key=lambda item: item[1]["gain"], reverse=True)
     )
 
+    # Training medians are the "typical customer" that explanations compare against.
+    medians = feature_medians(partitions["train"])
+
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     model_path = output_path / "model.json"
@@ -152,6 +162,7 @@ def train_xgboost(
             "model": model,
             "feature_columns": FEATURE_COLUMNS,
             "threshold": threshold,
+            "feature_medians": medians,
         },
         bundle_path,
     )
@@ -178,6 +189,7 @@ def train_xgboost(
         ),
         "test_metrics": _metrics(test_y, test_probabilities, threshold),
         "feature_importance": importance,
+        "feature_medians": medians,
         "artifacts": {
             "model_json": model_path.name,
             "bundle": bundle_path.name,
@@ -198,6 +210,8 @@ def load_model_bundle(path: str | Path) -> dict[str, Any]:
     bundle = joblib.load(path)
     if tuple(bundle.get("feature_columns", ())) != FEATURE_COLUMNS:
         raise ValueError("The model bundle feature columns do not match this application.")
+    if "feature_medians" not in bundle:
+        raise ValueError("The model bundle has no feature medians for explanations; retrain the model.")
     return bundle
 
 
@@ -205,7 +219,7 @@ def predict_features(
     feature_rows: pd.DataFrame,
     bundle: dict[str, Any],
 ) -> pd.DataFrame:
-    """Add churn probability, risk band, and threshold-based prediction to features."""
+    """Add churn probability, risk band, threshold-based prediction, and explanation to features."""
     if tuple(bundle.get("feature_columns", ())) != FEATURE_COLUMNS:
         raise ValueError("The model bundle feature columns do not match this application.")
 
@@ -221,4 +235,12 @@ def predict_features(
         default="low",
     )
     results["predicted_churn"] = probabilities >= threshold
-    return results
+    explanations = explain_predictions(
+        bundle["model"],
+        feature_rows,
+        probabilities,
+        results["risk_level"].to_numpy(),
+        threshold,
+        bundle["feature_medians"],
+    )
+    return pd.concat([results, explanations], axis=1)

@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChurnSight X</title>
+<meta name="description" content="화장품 쇼핑몰 고객의 7일 내 이탈 위험 예측 결과와 모델 성능">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --series-1: #2a78d6;
+    --series-1-wash: rgba(42, 120, 214, 0.10);
+    --baseline-bar: #c3c2b7;
+    --status-critical: #d03b3b;
+    --status-warning: #fab219;
+    --status-good: #0ca30c;
+    --on-warning: #0b0b0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --series-1: #3987e5;
+      --series-1-wash: rgba(57, 135, 229, 0.14);
+      --baseline-bar: #5b5a55;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-1-wash: rgba(57, 135, 229, 0.14);
+    --baseline-bar: #5b5a55;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+  header h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--text-secondary); }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--text-secondary); margin: 0 0 16px; font-size: 14px; }
+  section { margin-top: 28px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  /* Let grid cells shrink below their tables' width; wide tables scroll inside their card. */
+  .grid-2 > *, .summary > *, .card { min-width: 0; }
+  @media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .summary { display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+  @media (max-width: 900px) { .summary { grid-template-columns: 1fr 1fr; } .summary .hero { grid-column: 1 / -1; } }
+  .tile-label { color: var(--text-secondary); font-size: 13px; }
+  .tile-value { font-size: 26px; font-weight: 600; margin-top: 2px; }
+  .tile-note { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+  .hero .tile-value { font-size: 52px; line-height: 1.1; }
+  .status { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.high { background: var(--status-critical); }
+  .dot.medium { background: var(--status-warning); }
+  .dot.low { background: var(--status-good); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .better { font-weight: 600; }
+  .metric-help { color: var(--text-muted); font-size: 12px; }
+  .table-wrap { overflow-x: auto; }
+
+  .cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; margin-top: 16px; font-size: 13px; }
+  .cm div { padding: 10px; border-radius: 8px; background: var(--page); text-align: center; font-variant-numeric: tabular-nums; }
+  .cm .head { background: none; color: var(--text-secondary); padding: 4px; }
+  .cm .hit { background: var(--series-1-wash); }
+  .cm strong { display: block; font-size: 18px; }
+
+  .bars { display: flex; flex-direction: column; gap: 10px; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; cursor: default; }
+  .bar-row .name { color: var(--text-secondary); font-size: 13px; text-align: right; }
+  /* Bar widths are percentages of the content box; the right padding holds the value label. */
+  .bar-track { height: 20px; display: flex; align-items: center; border-left: 1px solid var(--axis); padding-right: 64px; }
+  .bar {
+    flex: none;
+    height: 20px;
+    background: var(--series-1);
+    border-radius: 0 4px 4px 0;
+    min-width: 2px;
+  }
+  .bar.muted { background: var(--baseline-bar); }
+  .bar-value { flex: none; margin-left: 8px; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bar-row:hover .bar { filter: brightness(1.12); }
+  .pair { display: flex; flex-direction: column; gap: 3px; }
+  .pair .bar { height: 14px; }
+  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  @media (max-width: 520px) { .bar-row { grid-template-columns: 100px 1fr; } }
+
+  .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 12px; }
+  .filters label { display: flex; flex-direction: column; font-size: 12px; color: var(--text-secondary); gap: 4px; }
+  select, input {
+    font: inherit; font-size: 14px; color: var(--text-primary); background: var(--page);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-width: 140px;
+  }
+  .count { margin-left: auto; color: var(--text-secondary); font-size: 13px; }
+  .customers { max-height: 560px; overflow: auto; }
+  .customers thead th { position: sticky; top: 0; background: var(--surface); }
+  .customers td.explain { min-width: 360px; }
+  .customers td:not(.explain) { white-space: nowrap; }
+  th.sortable { cursor: pointer; user-select: none; }
+
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    max-width: 260px;
+  }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+  dt { color: var(--text-secondary); }
+  dd { margin: 0; }
+  footer { margin-top: 32px; color: var(--text-muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ChurnSight X 고객 이탈 예측</h1>
+    <p id="intro"></p>
+  </header>
+
+  <div class="summary" id="summary"></div>
+
+  <section>
+    <h2>모델 성능</h2>
+    <p class="sub" id="perf-sub"></p>
+    <div class="grid-2">
+      <div class="card">
+        <div class="table-wrap"><table id="perf-table"></table></div>
+      </div>
+      <div class="card">
+        <h2 style="font-size:15px">위험 등급별 실제 이탈률 (test)</h2>
+        <p class="sub">등급이 높을수록 실제로 더 많이 이탈했는지 확인합니다.</p>
+        <div class="bars" id="band-bars"></div>
+        <div class="cm" id="confusion"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <div class="card">
+      <h2>판정 요인 분포</h2>
+      <p class="sub" id="factor-sub"></p>
+      <div class="bars" id="factor-bars"></div>
+    </div>
+    <div class="card">
+      <h2>피처 중요도</h2>
+      <p class="sub">모델 전체에서 각 피처가 분할로 줄인 손실(Gain)의 비중입니다.</p>
+      <div class="bars" id="importance-bars"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>고객별 예측</h2>
+    <p class="sub">고객 ID는 끝 두 자리를 가렸습니다. 이탈 확률이 높은 순서로 정렬되어 있습니다.</p>
+    <div class="card">
+      <div class="filters">
+        <label>위험 등급
+          <select id="filter-risk">
+            <option value="">전체</option>
+            <option value="high">높음</option>
+            <option value="medium">보통</option>
+            <option value="low">낮음</option>
+          </select>
+        </label>
+        <label>판정
+          <select id="filter-churn">
+            <option value="">전체</option>
+            <option value="1">이탈 예측</option>
+            <option value="0">유지 예측</option>
+          </select>
+        </label>
+        <label>판정 요인
+          <select id="filter-factor"><option value="">전체</option></select>
+        </label>
+        <label>고객 ID 검색
+          <input id="filter-id" type="search" placeholder="예: 6002">
+        </label>
+        <span class="count" id="row-count"></span>
+      </div>
+      <div class="customers table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>고객 ID</th>
+              <th class="num sortable" id="sort-prob">이탈 확률 ▼</th>
+              <th>위험 등급</th>
+              <th>판정</th>
+              <th>설명</th>
+            </tr>
+          </thead>
+          <tbody id="customer-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>예측 방식</h2>
+    <dl id="method"></dl>
+  </section>
+
+  <footer id="footer"></footer>
+</main>
+<div class="tooltip" id="tooltip" role="tooltip"></div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  const D = window.DASHBOARD;
+  const RISK = { high: "높음", medium: "보통", low: "낮음" };
+  const pct = (v, digits = 1) => (v * 100).toFixed(digits) + "%";
+  const fmt = (v) => v.toLocaleString("ko-KR");
+  const el = (tag, attrs = {}, children = []) => {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key === "text") node.textContent = value;
+      else if (key === "style") node.style.cssText = value;
+      else node.setAttribute(key, value);
+    }
+    for (const child of [].concat(children)) node.append(child);
+    return node;
+  };
+  const status = (level) => el("span", { class: "status" }, [el("span", { class: "dot " + level }), "위험 " + RISK[level]]);
+
+  // Tooltip shared by every bar row (rows carry their text in data-tip).
+  const tooltip = document.getElementById("tooltip");
+  document.addEventListener("mousemove", (event) => {
+    const row = event.target.closest("[data-tip]");
+    if (!row) { tooltip.style.display = "none"; return; }
+    tooltip.textContent = row.dataset.tip;
+    tooltip.style.display = "block";
+    const x = Math.min(event.clientX + 14, window.innerWidth - tooltip.offsetWidth - 8);
+    tooltip.style.left = x + "px";
+    tooltip.style.top = event.clientY + 14 + "px";
+  });
+
+  const customers = D.customers;
+  const churnCount = customers.filter((c) => c.churn).length;
+  const bandCount = (level) => customers.filter((c) => c.risk === level).length;
+  const test = D.test;
+
+  document.getElementById("intro").textContent =
+    `기준일 ${D.reference_date}에 예측 대상 조건을 만족한 고객이 이후 7일 동안 ` +
+    `한 번도 접속하지 않을(이탈) 위험을 예측했습니다. 모델 버전 ${D.model_version}.`;
+
+  // Summary: one hero figure plus supporting tiles.
+  const tile = (label, value, note, extraClass = "") =>
+    el("div", { class: "card " + extraClass }, [
+      el("div", { class: "tile-label" }, label),
+      el("div", { class: "tile-value" }, value),
+      el("div", { class: "tile-note", text: note }),
+    ]);
+  document.getElementById("summary").append(
+    tile("이탈 예측 고객", fmt(churnCount) + "명", `예측 대상 ${fmt(customers.length)}명 중 ${pct(churnCount / customers.length)}`, "hero"),
+    tile(status("high"), fmt(bandCount("high")) + "명", `이탈 확률 ${pct(D.risk_high_min, 0)} 이상`),
+    tile(status("medium"), fmt(bandCount("medium")) + "명", `${pct(D.risk_medium_min, 0)} 이상 ${pct(D.risk_high_min, 0)} 미만`),
+    tile(status("low"), fmt(bandCount("low")) + "명", `${pct(D.risk_medium_min, 0)} 미만`),
+    tile("Test PR-AUC", test.model.pr_auc.toFixed(3), `전부 이탈로 찍으면 ${test.all_churn.pr_auc.toFixed(3)}`),
+  );
+
+  // Performance table: model against the predict-everyone-churns baseline.
+  document.getElementById("perf-sub").textContent =
+    `학습에 쓰지 않은 test 기간(${test.start} ~ ${test.end}, ${fmt(test.rows)}건, 실제 이탈률 ${pct(test.churn_rate)})에서 측정했습니다.`;
+  const metrics = [
+    ["pr_auc", "PR-AUC", "이탈 고객을 위쪽에 줄 세우는 능력"],
+    ["roc_auc", "ROC-AUC", "이탈·유지 고객을 구분하는 능력 (0.5 = 무작위)"],
+    ["precision", "Precision", "이탈로 예측한 고객 중 실제 이탈"],
+    ["recall", "Recall", "실제 이탈 고객 중 잡아낸 비율"],
+    ["f1", "F1", "Precision과 Recall의 조화 평균"],
+    ["accuracy", "Accuracy", "전체 정답 비율"],
+    ["specificity", "Specificity", "유지 고객을 유지로 맞힌 비율"],
+  ];
+  const perf = document.getElementById("perf-table");
+  perf.append(el("thead", {}, el("tr", {}, [el("th", { text: "지표" }), el("th", { class: "num", text: "모델" }), el("th", { class: "num", text: "전부 이탈" })])));
+  const perfBody = el("tbody");
+  for (const [key, name, help] of metrics) {
+    const model = test.model[key], base = test.all_churn[key];
+    perfBody.append(el("tr", {}, [
+      el("td", {}, [name, el("div", { class: "metric-help", text: help })]),
+      el("td", { class: "num" + (model > base ? " better" : ""), text: model.toFixed(3) }),
+      el("td", { class: "num" + (base > model ? " better" : ""), text: base.toFixed(3) }),
+    ]));
+  }
+  perf.append(perfBody);
+
+  // Horizontal bar chart helper: rows of {name, value, label, tip}.
+  const barChart = (target, rows, max) => {
+    const host = document.getElementById(target);
+    for (const row of rows) {
+      host.append(el("div", { class: "bar-row", "data-tip": row.tip }, [
+        el("span", { class: "name", text: row.name }),
+        el("div", { class: "bar-track" }, [
+          el("div", { class: "bar", style: `width: ${(row.value / max) * 100}%` }),
+          el("span", { class: "bar-value", text: row.label }),
+        ]),
+      ]));
+    }
+  };
+
+  barChart("band-bars", test.risk_bands.filter((b) => b.count > 0).map((b) => ({
+    name: "위험 " + RISK[b.level],
+    value: b.actual_churn_rate,
+    label: pct(b.actual_churn_rate),
+    tip: `위험 ${RISK[b.level]}: ${fmt(b.count)}명 중 실제 이탈 ${pct(b.actual_churn_rate)}`,
+  })), 1);
+
+  const m = test.model;
+  document.getElementById("confusion").append(
+    el("div", { class: "head" }), el("div", { class: "head", text: "실제 이탈" }), el("div", { class: "head", text: "실제 유지" }),
+    el("div", { class: "head", text: "이탈 예측" }),
+    el("div", { class: "hit" }, [el("strong", { text: fmt(m.tp) }), "맞힘"]),
+    el("div", {}, [el("strong", { text: fmt(m.fp) }), "잘못 경고"]),
+    el("div", { class: "head", text: "유지 예측" }),
+    el("div", {}, [el("strong", { text: fmt(m.fn) }), "놓침"]),
+    el("div", { class: "hit" }, [el("strong", { text: fmt(m.tn) }), "맞힘"]),
+  );
+
+  document.getElementById("factor-sub").textContent =
+    `기준일 대상 ${fmt(customers.length)}명의 판정을 가장 크게 좌우한 요인입니다.`;
+  const factorMax = Math.max(...D.factor_counts.map((f) => f.count));
+  barChart("factor-bars", D.factor_counts.map((f) => ({
+    name: f.feature, value: f.count, label: fmt(f.count) + "명",
+    tip: `${f.feature}: ${fmt(f.count)}명 (${pct(f.count / customers.length)})`,
+  })), factorMax);
+
+  const importanceMax = Math.max(...D.feature_importance.map((f) => f.share));
+  barChart("importance-bars", D.feature_importance.map((f) => ({
+    name: f.feature, value: f.share, label: pct(f.share), tip: `${f.feature}: Gain 비중 ${pct(f.share)}`,
+  })), importanceMax);
+
+  // Customer table with filters.
+  const factorSelect = document.getElementById("filter-factor");
+  for (const f of D.factor_counts) factorSelect.append(el("option", { value: f.feature, text: f.feature }));
+  const rowsHost = document.getElementById("customer-rows");
+  const sortHeader = document.getElementById("sort-prob");
+  let descending = true;
+  const render = () => {
+    const risk = document.getElementById("filter-risk").value;
+    const churn = document.getElementById("filter-churn").value;
+    const factor = factorSelect.value;
+    const query = document.getElementById("filter-id").value.trim();
+    const shown = customers
+      .filter((c) => (!risk || c.risk === risk) && (!churn || String(Number(c.churn)) === churn)
+        && (!factor || c.factor === factor) && (!query || c.id.includes(query)))
+      .sort((a, b) => (descending ? b.probability - a.probability : a.probability - b.probability));
+    rowsHost.replaceChildren(...shown.map((c) => el("tr", {}, [
+      el("td", { class: "num", style: "text-align:left", text: c.id }),
+      el("td", { class: "num", text: pct(c.probability) }),
+      el("td", {}, status(c.risk)),
+      el("td", { text: c.churn ? "이탈 예측" : "유지 예측" }),
+      el("td", { class: "explain", text: c.explanation }),
+    ])));
+    document.getElementById("row-count").textContent = `${fmt(shown.length)}명 표시`;
+    sortHeader.textContent = "이탈 확률 " + (descending ? "▼" : "▲");
+  };
+  for (const id of ["filter-risk", "filter-churn", "filter-factor", "filter-id"]) {
+    document.getElementById(id).addEventListener("input", render);
+  }
+  sortHeader.addEventListener("click", () => { descending = !descending; render(); });
+  render();
+
+  const hp = D.hyperparameters;
+  const method = [
+    ["예측 대상", "기준일 N에서 N-6~N 7일간 미접속, N-7에 접속, N-44~N 45일 중 접속일 4일 이상인 고객"],
+    ["이탈 정의", "N+1~N+7 7일 동안 한 번도 접속하지 않음 (조회·장바구니 담기/빼기·구매 중 하나라도 있으면 접속)"],
+    ["피처", "최근 45일 행동으로 계산한 11개 피처 (접속일 수, 둘러본 상품 수, 접속 간격, 구매·장바구니·조회 비율 등)"],
+    ["모델", `XGBoost (학습률 ${hp.learning_rate}, 깊이 ${hp.max_depth}, 트리 ${D.best_iteration + 1}개, early stopping ${D.early_stopping_rounds}라운드)`],
+    ["데이터 분할", `기준일 시간순 train ${D.train.start}~${D.train.end} (${fmt(D.train.rows)}건) / validation ${D.validation.start}~${D.validation.end} (${fmt(D.validation.rows)}건) / test ${test.start}~${test.end} (${fmt(test.rows)}건)`],
+    ["이탈 판정 임계값", `${D.threshold.toFixed(4)}: validation에서 Recall 70% 이상을 지키며 Precision이 가장 높은 값`],
+    ["위험 등급", `높음 ${pct(D.risk_high_min, 0)} 이상, 보통 ${pct(D.risk_medium_min, 0)} 이상, 낮음 ${pct(D.risk_medium_min, 0)} 미만`],
+    ["설명 문장", "고객별 TreeSHAP 기여도로 판정 방향(이탈/유지)을 가장 크게 민 피처를 골라, 학습 데이터 중앙값(일반 고객)과 비교해 설명"],
+  ];
+  document.getElementById("method").append(...method.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]));
+
+  document.getElementById("footer").textContent =
+    "데이터: Kaggle eCommerce Events History in Cosmetics Shop (2019-10 ~ 2020-02). 고객 ID는 데이터셋의 익명 ID이며 끝 두 자리를 가렸습니다. 예측 결과는 학습·데모 목적입니다.";
+})();
+</script>
+</body>
+</html>

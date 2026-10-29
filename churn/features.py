@@ -1,4 +1,4 @@
-"""Build the sixteen 45-day churn prediction features."""
+"""Build the eleven 45-day churn prediction features."""
 
 import numpy as np
 import pandas as pd
@@ -9,17 +9,12 @@ from churn.daily import normalize_events
 
 FEATURE_COLUMNS = (
     "active_days_45d",
-    "event_count_45d",
-    "view_count_45d",
     "cart_count_45d",
-    "transaction_count_45d",
     "unique_items_45d",
     "days_since_last_purchase",
     "active_day_gap_mean",
     "active_day_gap_std",
-    "purchase_days_45d",
     "unique_viewed_items_45d",
-    "unique_cart_items_45d",
     "unique_purchased_items_45d",
     "view_event_ratio",
     "cart_event_ratio",
@@ -46,31 +41,22 @@ def _window_features(window: pd.DataFrame, reference_date: pd.Timestamp) -> pd.D
     )
     grouped = flags.groupby("sample_idx")
     views = flags.loc[flags["is_view"]].groupby("sample_idx")
-    carts = flags.loc[flags["is_cart"]].groupby("sample_idx")
     purchases = flags.loc[flags["is_transaction"]].groupby("sample_idx")
     features = pd.DataFrame(
         {
-            "event_count_45d": grouped.size(),
-            "view_count_45d": grouped["is_view"].sum(),
             "cart_count_45d": grouped["is_cart"].sum(),
-            "purchase_event_count": grouped["is_transaction"].sum(),
             "unique_items_45d": grouped["itemid"].nunique(),
         }
     )
 
-    # Multi-item orders share one transactionid; count each order once when ids exist.
-    if "transactionid" in flags.columns:
-        features["transaction_count_45d"] = purchases["transactionid"].nunique()
-    else:
-        features["transaction_count_45d"] = features["purchase_event_count"]
     features["days_since_last_purchase"] = (reference_date - purchases["event_date"].max()).dt.days
-    features["purchase_days_45d"] = purchases["event_date"].nunique()
     features["unique_viewed_items_45d"] = views["itemid"].nunique()
-    features["unique_cart_items_45d"] = carts["itemid"].nunique()
     features["unique_purchased_items_45d"] = purchases["itemid"].nunique()
-    features["view_event_ratio"] = features["view_count_45d"] / features["event_count_45d"]
-    features["cart_event_ratio"] = features["cart_count_45d"] / features["event_count_45d"]
-    features["purchase_event_ratio"] = features["purchase_event_count"] / features["event_count_45d"]
+    # Ratios are shares of all window events, removefromcart included.
+    event_count = grouped.size()
+    features["view_event_ratio"] = grouped["is_view"].sum() / event_count
+    features["cart_event_ratio"] = features["cart_count_45d"] / event_count
+    features["purchase_event_ratio"] = grouped["is_transaction"].sum() / event_count
 
     active_dates = flags.loc[:, ["sample_idx", "event_date"]].drop_duplicates()
     active_dates = active_dates.sort_values(["sample_idx", "event_date"])
@@ -84,7 +70,7 @@ def _window_features(window: pd.DataFrame, reference_date: pd.Timestamp) -> pd.D
 
 
 def build_features(events: pd.DataFrame, samples: pd.DataFrame) -> pd.DataFrame:
-    """Return sample identifiers and sixteen features from each OBS_DAYS observation window."""
+    """Return sample identifiers and eleven features from each OBS_DAYS observation window."""
     required_sample_columns = {"visitor_id", "reference_date"}
     missing_sample_columns = required_sample_columns.difference(samples.columns)
     if missing_sample_columns:
@@ -101,8 +87,6 @@ def build_features(events: pd.DataFrame, samples: pd.DataFrame) -> pd.DataFrame:
         }
     )
     event_columns = ["visitorid", "event_date", "event", "itemid"]
-    if "transactionid" in events.columns:
-        event_columns.append("transactionid")
     sample_events = events.loc[events["visitorid"].isin(sample_keys["visitorid"]), event_columns]
 
     # One reference date at a time keeps the sample-by-event join small.

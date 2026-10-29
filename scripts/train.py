@@ -1,4 +1,4 @@
-"""Train and version the sixteen-feature XGBoost churn model."""
+"""Train and version the eleven-feature XGBoost churn model."""
 
 import argparse
 import json
@@ -10,10 +10,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from churn.daily import activity_matrix, complete_date_range, normalize_events, read_events, trim_incomplete_days
-from churn.features import build_features
+import pandas as pd
+
+from churn.daily import read_events
+from churn.dataset import feature_samples_from_events, read_feature_samples
 from churn.models import DEFAULT_XGBOOST_PARAMETERS, train_xgboost
-from churn.sampling import build_training_samples, training_reference_dates
+from churn.split import DATASET_COLUMN
 from config import MODELS_DIR, REFERENCE_STRIDE_DAYS, TARGET_RECALL
 
 
@@ -21,10 +23,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--events",
-        required=True,
         type=Path,
         nargs="+",
+        default=[],
         help="Event CSV files or directories of CSVs",
+    )
+    parser.add_argument(
+        "--samples",
+        type=Path,
+        nargs="+",
+        default=[],
+        help="Labeled feature tables in the target_samples.csv layout",
     )
     parser.add_argument("--models-dir", type=Path, default=MODELS_DIR)
     parser.add_argument("--stride", type=int, default=REFERENCE_STRIDE_DAYS)
@@ -37,17 +46,19 @@ def main() -> None:
         default=DEFAULT_XGBOOST_PARAMETERS["learning_rate"],
     )
     args = parser.parse_args()
+    if not args.events and not args.samples:
+        parser.error("give --events, --samples, or both")
 
-    events = normalize_events(read_events(args.events))
-    complete_dates = complete_date_range(events)
-    complete_events = trim_incomplete_days(events)
-    matrix = activity_matrix(complete_events, dates=complete_dates)
-    reference_dates = training_reference_dates(matrix.columns, stride_days=args.stride)
-    labeled_samples = build_training_samples(matrix, reference_dates)
-    if labeled_samples.empty:
-        raise SystemExit("No eligible training samples were generated from the input events.")
+    tables = []
+    if args.events:
+        events_samples = feature_samples_from_events(read_events(args.events), stride_days=args.stride)
+        tables.append(events_samples.assign(**{DATASET_COLUMN: "events"}))
+    if args.samples:
+        tables.append(read_feature_samples(args.samples))
+    feature_samples = pd.concat(tables, ignore_index=True)
+    if feature_samples.empty:
+        raise SystemExit("No eligible training samples were generated from the inputs.")
 
-    feature_samples = build_features(complete_events, labeled_samples)
     version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     version_dir = args.models_dir / version
     result = train_xgboost(
@@ -69,6 +80,7 @@ def main() -> None:
                 "model_version": version,
                 "model_dir": str(version_dir),
                 "sample_count": len(feature_samples),
+                "split": result["metadata"]["split"],
                 "threshold": result["metadata"]["threshold_selection"],
                 "test_metrics": result["metadata"]["test_metrics"],
             },

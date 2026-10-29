@@ -23,17 +23,12 @@ def make_labeled_features() -> pd.DataFrame:
                     "reference_date": reference_date,
                     "churn": churn,
                     "active_days_45d": engagement,
-                    "event_count_45d": engagement * 3,
-                    "view_count_45d": engagement * 2,
                     "cart_count_45d": engagement // 3,
-                    "transaction_count_45d": 1 - churn,
                     "unique_items_45d": engagement // 2,
                     "days_since_last_purchase": 5 + churn * 20,
                     "active_day_gap_mean": 1.0 + churn * 2,
                     "active_day_gap_std": 0.5 + churn,
-                    "purchase_days_45d": 1 - churn,
                     "unique_viewed_items_45d": engagement // 2,
-                    "unique_cart_items_45d": engagement // 6,
                     "unique_purchased_items_45d": 1 - churn,
                     "view_event_ratio": 0.6 + churn * 0.3,
                     "cart_event_ratio": 0.1 - churn * 0.05,
@@ -86,6 +81,9 @@ class ModelPipelineTests(unittest.TestCase):
             self.assertIn("learner", tree_model)
             self.assertEqual(len(predictions), 5)
             self.assertTrue(predictions["churn_probability"].between(0, 1).all())
+            self.assertTrue(predictions["top_factor"].isin(FEATURE_COLUMNS).all())
+            self.assertTrue(predictions["explanation"].str.startswith("이탈 위험 ").all())
+            self.assertEqual(set(config["feature_medians"]), set(FEATURE_COLUMNS))
             self.assertEqual(service_predictions["visitor_id"].tolist(), [1])
             self.assertTrue(
                 service_predictions["churn_probability"].between(0, 1).all()

@@ -53,6 +53,10 @@ def main() -> None:
                     level: int(count)
                     for level, count in predictions["risk_level"].value_counts(sort=False).items()
                 },
+                "top_factor_counts": {
+                    factor: int(count)
+                    for factor, count in predictions["top_factor"].value_counts().items()
+                },
             },
             indent=2,
         )

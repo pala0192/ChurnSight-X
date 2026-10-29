@@ -36,26 +36,17 @@ def reference_build_features(events: pd.DataFrame, samples: pd.DataFrame) -> pd.
             days_since_purchase = np.nan
         else:
             days_since_purchase = int((reference_date - purchases["event_date"].max()).days)
-        if "transactionid" in purchases.columns:
-            transaction_count = int(purchases["transactionid"].nunique())
-        else:
-            transaction_count = len(purchases)
         event_count = len(window)
 
         rows.append(
             {
                 "active_days_45d": len(event_dates),
-                "event_count_45d": event_count,
-                "view_count_45d": len(views),
                 "cart_count_45d": len(carts),
-                "transaction_count_45d": transaction_count,
                 "unique_items_45d": int(window["itemid"].nunique()),
                 "days_since_last_purchase": days_since_purchase,
                 "active_day_gap_mean": float(gaps.mean()) if not gaps.empty else 0.0,
                 "active_day_gap_std": float(gaps.std(ddof=1)) if len(gaps) > 1 else 0.0,
-                "purchase_days_45d": int(purchases["event_date"].nunique()),
                 "unique_viewed_items_45d": int(views["itemid"].nunique()),
-                "unique_cart_items_45d": int(carts["itemid"].nunique()),
                 "unique_purchased_items_45d": int(purchases["itemid"].nunique()),
                 "view_event_ratio": len(views) / event_count if event_count else 0.0,
                 "cart_event_ratio": len(carts) / event_count if event_count else 0.0,
@@ -104,29 +95,24 @@ class FeatureTests(unittest.TestCase):
             }
         )
 
-    def test_builds_sixteen_features_from_the_exact_observation_window(self) -> None:
+    def test_builds_eleven_features_from_the_exact_observation_window(self) -> None:
         features = build_features(self.events, self.samples)
         customer = features.iloc[0]
 
-        self.assertEqual(tuple(features.columns[-16:]), FEATURE_COLUMNS)
+        self.assertEqual(tuple(features.columns[-11:]), FEATURE_COLUMNS)
         self.assertEqual(customer["active_days_45d"], 6)
-        self.assertEqual(customer["event_count_45d"], 6)
-        self.assertEqual(customer["view_count_45d"], 4)
         self.assertEqual(customer["cart_count_45d"], 1)
-        self.assertEqual(customer["transaction_count_45d"], 1)
         self.assertEqual(customer["unique_items_45d"], 4)
         self.assertEqual(customer["days_since_last_purchase"], 10)
         self.assertAlmostEqual(customer["active_day_gap_mean"], 5.8)
         self.assertAlmostEqual(customer["active_day_gap_std"], 7.7 ** 0.5)
-        self.assertEqual(customer["purchase_days_45d"], 1)
         self.assertEqual(customer["unique_viewed_items_45d"], 3)
-        self.assertEqual(customer["unique_cart_items_45d"], 1)
         self.assertEqual(customer["unique_purchased_items_45d"], 1)
         self.assertAlmostEqual(customer["view_event_ratio"], 4 / 6)
         self.assertAlmostEqual(customer["cart_event_ratio"], 1 / 6)
         self.assertAlmostEqual(customer["purchase_event_ratio"], 1 / 6)
 
-    def test_transaction_count_uses_unique_transaction_ids(self) -> None:
+    def test_multi_item_order_counts_each_purchased_row(self) -> None:
         purchase = self.events.loc[self.events["event"].eq("transaction")].iloc[[0]]
         second_item = purchase.assign(itemid="item-7")
         events = pd.concat([self.events, second_item], ignore_index=True)
@@ -134,7 +120,6 @@ class FeatureTests(unittest.TestCase):
 
         customer = build_features(events, self.samples).iloc[0]
 
-        self.assertEqual(customer["transaction_count_45d"], 1)
         self.assertEqual(customer["unique_purchased_items_45d"], 2)
         self.assertAlmostEqual(customer["purchase_event_ratio"], 2 / 7)
 
@@ -147,7 +132,6 @@ class FeatureTests(unittest.TestCase):
         customer = build_features(events, self.samples).iloc[1]
 
         self.assertEqual(customer["active_days_45d"], 2)
-        self.assertEqual(customer["event_count_45d"], 2)
         self.assertEqual(customer["cart_count_45d"], 0)
         self.assertEqual(customer["unique_items_45d"], 2)
         self.assertAlmostEqual(customer["view_event_ratio"], 0.5)
@@ -165,7 +149,7 @@ class FeatureTests(unittest.TestCase):
         self.assertEqual(features["active_day_gap_mean"], 0.0)
         self.assertEqual(features["active_day_gap_std"], 0.0)
         self.assertEqual(features["view_event_ratio"], 1.0)
-        self.assertEqual(features["purchase_days_45d"], 0)
+        self.assertEqual(features["unique_purchased_items_45d"], 0)
 
     def test_rejects_more_than_five_percent_invalid_events(self) -> None:
         invalid = self.events.iloc[[0]].copy()

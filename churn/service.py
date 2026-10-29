@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 
 from churn.daily import activity_matrix, complete_date_range, normalize_events, trim_incomplete_days
+from churn.explain import EXPLANATION_COLUMNS
 from churn.features import FEATURE_COLUMNS, build_features
 from churn.models import load_model_bundle, predict_features
 from churn.sampling import target_mask
@@ -55,6 +56,7 @@ def predict_events(
                 "churn_probability",
                 "risk_level",
                 "predicted_churn",
+                *EXPLANATION_COLUMNS,
             ]
         )
 
