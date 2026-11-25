@@ -90,5 +90,3 @@ python scripts\build_dashboard.py --samples data\cosmetics_target_samples.csv --
 ```powershell
 python -m unittest discover -s tests -v
 ```
-
-상세 설계는 [`ARCHITECTURE.md`](ARCHITECTURE.md)를 참고하세요.

@@ -154,7 +154,6 @@ def train_xgboost(
     output_path.mkdir(parents=True, exist_ok=True)
     model_path = output_path / "model.json"
     bundle_path = output_path / "bundle.joblib"
-    config_path = output_path / "model_config.json"
     meta_path = output_path / "meta.json"
     model.save_model(model_path)
     joblib.dump(
@@ -196,11 +195,10 @@ def train_xgboost(
         },
         "created_at_utc": datetime.now(UTC).isoformat(),
     }
-    for json_path, value in ((config_path, metadata), (meta_path, metadata)):
-        json_path.write_text(
-            json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False),
-            encoding="utf-8",
-        )
+    meta_path.write_text(
+        json.dumps(metadata, indent=2, ensure_ascii=False, allow_nan=False),
+        encoding="utf-8",
+    )
 
     return {"model": model, "bundle_path": bundle_path, "metadata": metadata}
 

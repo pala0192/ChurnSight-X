@@ -49,7 +49,7 @@ class ModelPipelineTests(unittest.TestCase):
                 parameters={"n_estimators": 12, "max_depth": 2, "n_jobs": 1},
             )
 
-            config_path = output_dir / "model_config.json"
+            config_path = output_dir / "meta.json"
             tree_model_path = output_dir / "model.json"
             bundle_path = output_dir / "bundle.joblib"
             config = json.loads(config_path.read_text(encoding="utf-8"))
